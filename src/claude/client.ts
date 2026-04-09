@@ -4,7 +4,7 @@ import { getModelId, DEFAULT_MODEL } from "./models.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
 import { SkillError } from "../utils/errors.js";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -32,14 +32,13 @@ class ClaudeClientClass {
     this.model = options?.model || config.provider.model || DEFAULT_MODEL;
 
     // Verify Claude CLI is available
-    try {
-      execSync("claude --version", { stdio: "pipe" });
-      logger.info("Claude CLI detected");
-    } catch {
+    const versionCheck = spawnSync("claude", ["--version"], { encoding: "utf-8" });
+    if (versionCheck.error || versionCheck.status !== 0) {
       throw new Error(
         "Claude CLI non trouvé. Installe-le avec: npm install -g @anthropic-ai/claude-code"
       );
     }
+    logger.info("Claude CLI detected");
 
     this.initialized = true;
     logger.info(`Claude client initialized with model: ${this.model} (via CLI)`);
@@ -94,42 +93,42 @@ class ClaudeClientClass {
     messages: Array<{ role: string; content: string }>;
     tools: Array<{ name: string; description: string; input_schema: unknown }>;
   }): Promise<{ text: string; toolCalls?: Array<{ name: string; input: Record<string, unknown> }> }> {
-    // Build the prompt from messages
+    // Get only the last user message (simple approach)
     const lastUserMessage = request.messages.filter((m) => m.role === "user").pop();
     const prompt = lastUserMessage?.content || "";
 
-    // Build conversation context
-    const context = request.messages
-      .slice(0, -1) // Exclude the last message (we'll send it as the prompt)
-      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-      .join("\n\n");
-
-    const fullPrompt = context ? `${context}\n\nUser: ${prompt}` : prompt;
-
     try {
-      // Call Claude CLI with -p (print mode) and --output-format text
-      const escapedPrompt = fullPrompt.replace(/"/g, '\\"').replace(/\n/g, "\\n");
-      const escapedSystem = request.system.replace(/"/g, '\\"').replace(/\n/g, "\\n");
+      logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
-      const cmd = `claude -p "${escapedPrompt}" --model ${request.model} --system-prompt "${escapedSystem}" --output-format text --bare`;
-
-      logger.debug(`Calling Claude CLI: ${cmd.slice(0, 100)}...`);
-
-      const output = execSync(cmd, {
+      // Use spawnSync with stdin to avoid shell escaping issues
+      const result = spawnSync("claude", [
+        "-p", prompt,
+        "--model", request.model,
+        "--append-system-prompt", request.system,
+        "--output-format", "text",
+        "--bare"
+      ], {
         encoding: "utf-8",
-        timeout: 120000, // 2 minutes timeout
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+        timeout: 120000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
       });
 
+      if (result.error) {
+        throw result.error;
+      }
+
+      if (result.status !== 0) {
+        logger.error(`Claude CLI stderr: ${result.stderr}`);
+        throw new Error(`Claude CLI exited with code ${result.status}`);
+      }
+
       return {
-        text: output.trim() || "Je n'ai pas pu générer de réponse.",
-        toolCalls: undefined, // CLI mode doesn't support tool calls for now
+        text: result.stdout.trim() || "Je n'ai pas pu générer de réponse.",
+        toolCalls: undefined,
       };
     } catch (error: any) {
       logger.error(`Claude CLI error: ${error.message}`);
-      if (error.stderr) {
-        logger.error(`stderr: ${error.stderr}`);
-      }
       throw new Error(`Claude CLI error: ${error.message}`);
     }
   }
