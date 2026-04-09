@@ -66,10 +66,12 @@ class ClaudeClientClass {
 
   /**
    * Get the authorization header for API calls
+   * Note: OAuth tokens must be sent via x-api-key header, NOT Bearer!
    */
   private getAuthHeader(): Record<string, string> {
     if (this.authMethod === "oauth" && this.oauthToken) {
-      return { Authorization: `Bearer ${this.oauthToken}` };
+      // OAuth tokens go via x-api-key, not Authorization Bearer
+      return { "x-api-key": this.oauthToken };
     }
     if (this.apiKey) {
       return { "x-api-key": this.apiKey };
