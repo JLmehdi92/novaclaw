@@ -1,5 +1,5 @@
 // src/claude/client.ts
-import { loadConfig } from "../config.js";
+import { loadConfig } from "../config/loader.js";
 import { getModelId, DEFAULT_MODEL } from "./models.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
@@ -26,9 +26,9 @@ class ClaudeClientClass {
   private initialized = false;
   private model: string = DEFAULT_MODEL;
 
-  async initialize(options?: { model?: string }): Promise<void> {
+  async initialize(options?: { model?: string; apiKey?: string }): Promise<void> {
     const config = loadConfig();
-    this.model = options?.model || config.claude.model || DEFAULT_MODEL;
+    this.model = options?.model || config.provider.model || DEFAULT_MODEL;
     this.initialized = true;
     logger.info(`Claude client initialized with model: ${this.model}`);
   }

@@ -1,6 +1,6 @@
 // src/gateway/bot.ts
 import { Bot } from "grammy";
-import { loadConfig } from "../config.js";
+import { loadConfig, loadCredentials } from "../config/loader.js";
 import { authMiddleware, loggingMiddleware, rateLimitMiddleware } from "./middleware.js";
 import { registerCommands } from "./commands/telegram-commands.js";
 import { novaClawAgent } from "../core/agent.js";
@@ -10,8 +10,9 @@ let bot: Bot | null = null;
 
 export async function startBot(): Promise<void> {
   const config = loadConfig();
-  
-  bot = new Bot(config.telegram.botToken);
+  const credentials = loadCredentials();
+
+  bot = new Bot(credentials.telegram.botToken);
 
   // Middleware
   bot.use(loggingMiddleware);

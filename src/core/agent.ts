@@ -5,11 +5,10 @@ import { sessionManager } from "./session.js";
 import { memoryManager } from "./memory.js";
 import { authManager } from "../security/auth.js";
 import { logger } from "../utils/logger.js";
-import { loadConfig } from "../config.js";
+import { loadConfig, getConfigDir } from "../config/loader.js";
+import { PERSONALITY_PROMPTS } from "../config/defaults.js";
 import path from "path";
 import fs from "fs";
-
-const WORKSPACES_DIR = "./data/workspaces";
 
 export const novaClawAgent = {
   async handleMessage(
@@ -72,12 +71,15 @@ export const novaClawAgent = {
 
   buildSystemPrompt(userId: number, memories: Array<{ key: string; value: string }>): string {
     const config = loadConfig();
-    const lang = config.language === "fr" ? "français" : "English";
+    const lang = config.agent.language === "fr" ? "français" : "English";
 
-    let prompt = `Tu es NovaClaw, un assistant IA personnel puissant.
-Tu peux exécuter du code, naviguer sur le web, manipuler des fichiers et bien plus.
-Réponds en ${lang}. Sois concis mais complet.
-L'utilisateur actuel a l'ID Telegram ${userId}.`;
+    // Use custom prompt if set, otherwise use personality preset
+    let basePrompt = config.agent.customSystemPrompt
+      || PERSONALITY_PROMPTS[config.agent.personality]
+      || PERSONALITY_PROMPTS.assistant;
+
+    let prompt = `${basePrompt}
+Réponds en ${lang}. L'utilisateur actuel a l'ID Telegram ${userId}.`;
 
     if (memories.length > 0) {
       prompt += "\n\nMémoires de l'utilisateur:";
@@ -90,7 +92,8 @@ L'utilisateur actuel a l'ID Telegram ${userId}.`;
   },
 
   ensureWorkspace(userId: number): string {
-    const workspace = path.join(WORKSPACES_DIR, String(userId));
+    const workspacesDir = path.join(getConfigDir(), "workspaces");
+    const workspace = path.join(workspacesDir, String(userId));
     if (!fs.existsSync(workspace)) {
       fs.mkdirSync(workspace, { recursive: true });
     }

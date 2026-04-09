@@ -1,22 +1,25 @@
 // src/security/auth.ts
-import { loadConfig } from "../config.js";
+import { loadConfig } from "../config/loader.js";
 import { getDatabase } from "../storage/db.js";
 import { logger } from "../utils/logger.js";
 
 export const authManager = {
   isAllowed(telegramUserId: number): boolean {
     const config = loadConfig();
-    return config.telegram.allowedIds.includes(telegramUserId);
+    const { ownerId, allowedUsers } = config.channels.telegram;
+    // Owner is always allowed, plus any users in allowedUsers list
+    return telegramUserId === ownerId || allowedUsers.includes(telegramUserId);
   },
 
   isOwner(telegramUserId: number): boolean {
     const config = loadConfig();
-    return config.telegram.ownerId === telegramUserId;
+    return config.channels.telegram.ownerId === telegramUserId;
   },
 
   getAllowedIds(): number[] {
     const config = loadConfig();
-    return [...config.telegram.allowedIds];
+    const { ownerId, allowedUsers } = config.channels.telegram;
+    return [ownerId, ...allowedUsers];
   },
 
   logAction(userId: number, action: string, details?: Record<string, unknown>): void {
