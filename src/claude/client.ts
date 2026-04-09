@@ -100,8 +100,14 @@ class ClaudeClientClass {
     try {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
-      // Build full prompt with system context
-      const fullPrompt = `${request.system}\n\nUser: ${prompt}`;
+      // Build full prompt with explicit instructions
+      const fullPrompt = `INSTRUCTIONS: ${request.system}
+
+Réponds directement à ce message de l'utilisateur. C'est un message complet, pas tronqué.
+
+MESSAGE DE L'UTILISATEUR: ${prompt}
+
+TA RÉPONSE:`;
 
       // Use spawnSync with shell: true for PATH resolution on Windows
       // Note: Don't use --bare as it disables OAuth authentication!
