@@ -128,17 +128,55 @@ class ClaudeClientClass {
     messages: Array<{ role: string; content: string }>;
     tools: Array<{ name: string; description: string; input_schema: unknown }>;
   }): Promise<{ text: string; toolCalls?: Array<{ name: string; input: Record<string, unknown> }> }> {
-    // TODO: Replace with actual Claude Agent SDK call
-    const lastUserMessage = request.messages.filter((m) => m.role === "user").pop();
+    const authHeaders = this.getAuthHeader();
+
+    const body: Record<string, unknown> = {
+      model: request.model,
+      max_tokens: 4096,
+      system: request.system,
+      messages: request.messages.filter(m => m.role !== "system"),
+    };
+
+    // Only include tools if there are any
+    if (request.tools.length > 0) {
+      body.tools = request.tools;
+    }
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+        ...authHeaders,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.error(`Claude API error: ${response.status} - ${error}`);
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json() as {
+      content: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }>;
+    };
+
+    // Extract text and tool calls from response
+    let text = "";
+    const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+    for (const block of data.content) {
+      if (block.type === "text" && block.text) {
+        text += block.text;
+      } else if (block.type === "tool_use" && block.name && block.input) {
+        toolCalls.push({ name: block.name, input: block.input });
+      }
+    }
 
     return {
-      text: `[NovaClaw MVP] Je suis en mode test. Tu as dit: "${lastUserMessage?.content || ""}"
-
-Modèle configuré: ${request.model}
-Tools disponibles: ${request.tools.map((t) => t.name).join(", ")}
-
-Pour activer les vraies réponses Claude, intègre le Claude Agent SDK.`,
-      toolCalls: undefined,
+      text: text || "Je n'ai pas pu générer de réponse.",
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     };
   }
 
