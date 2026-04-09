@@ -31,6 +31,11 @@ import { WebhookSenderSkill } from "./network/webhook-sender.js";
 import { WebhookReceiverSkill } from "./network/webhook-receiver.js";
 import { DnsLookupSkill } from "./network/dns-lookup.js";
 import { PortScannerSkill } from "./network/port-scanner.js";
+import { JsonProcessorSkill } from "./data/json-processor.js";
+import { CsvProcessorSkill } from "./data/csv-processor.js";
+import { TextAnalyzerSkill } from "./data/text-analyzer.js";
+import { ImageAnalyzerSkill } from "./data/image-analyzer.js";
+import { CalculatorSkill } from "./data/calculator.js";
 import { logger } from "../utils/logger.js";
 
 export function initializeSkills(): void {
@@ -76,6 +81,13 @@ export function initializeSkills(): void {
   SkillsRegistry.register(new WebhookReceiverSkill());
   SkillsRegistry.register(new DnsLookupSkill());
   SkillsRegistry.register(new PortScannerSkill());
+
+  // Data & AI skills
+  SkillsRegistry.register(new JsonProcessorSkill());
+  SkillsRegistry.register(new CsvProcessorSkill());
+  SkillsRegistry.register(new TextAnalyzerSkill());
+  SkillsRegistry.register(new ImageAnalyzerSkill());
+  SkillsRegistry.register(new CalculatorSkill());
 
   logger.info(`Initialized ${SkillsRegistry.count()} skills`);
 }
