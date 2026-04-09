@@ -100,14 +100,16 @@ class ClaudeClientClass {
     try {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
-      // Build full prompt with explicit instructions
-      const fullPrompt = `INSTRUCTIONS: ${request.system}
+      // Use system prompt or fallback to default
+      const systemInstructions = request.system?.trim() ||
+        "Tu es NovaClaw, un assistant IA personnel. Réponds en français de manière utile et amicale.";
 
-Réponds directement à ce message de l'utilisateur. C'est un message complet, pas tronqué.
+      // Build full prompt with clear structure
+      const fullPrompt = `${systemInstructions}
 
-MESSAGE DE L'UTILISATEUR: ${prompt}
+L'utilisateur dit: "${prompt}"`;
 
-TA RÉPONSE:`;
+      logger.debug(`System prompt: ${systemInstructions.slice(0, 50)}...`);
 
       // Use spawnSync with shell: true for PATH resolution on Windows
       // Note: Don't use --bare as it disables OAuth authentication!
