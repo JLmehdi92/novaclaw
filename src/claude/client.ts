@@ -100,11 +100,13 @@ class ClaudeClientClass {
     try {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
+      // Build full prompt with system context
+      const fullPrompt = `${request.system}\n\nUser: ${prompt}`;
+
       // Use spawnSync with shell: true for PATH resolution on Windows
       const result = spawnSync("claude", [
-        "-p", prompt,
+        "-p", fullPrompt,
         "--model", request.model,
-        "--append-system-prompt", request.system,
         "--output-format", "text",
         "--bare"
       ], {
