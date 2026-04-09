@@ -1,10 +1,21 @@
 // tests/skills/core/http-api.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
+
+// Setup test environment before importing modules that use config
+process.env.TELEGRAM_BOT_TOKEN = "test-token-12345678901234567890";
+process.env.TELEGRAM_OWNER_ID = "123";
+process.env.TELEGRAM_ALLOWED_IDS = "123";
+
 import { HttpApiSkill } from "../../../src/skills/core/http-api.js";
+import { resetConfig } from "../../../src/config.js";
 
 describe("HttpApiSkill", () => {
   const skill = new HttpApiSkill();
   const context = { workspace: "./data/test", userId: 123, chatId: 456 };
+
+  beforeAll(() => {
+    resetConfig();
+  });
 
   it("should make GET request", async () => {
     const result = await skill.execute(
