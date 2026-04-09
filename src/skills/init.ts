@@ -36,6 +36,10 @@ import { CsvProcessorSkill } from "./data/csv-processor.js";
 import { TextAnalyzerSkill } from "./data/text-analyzer.js";
 import { ImageAnalyzerSkill } from "./data/image-analyzer.js";
 import { CalculatorSkill } from "./data/calculator.js";
+import { EmailSenderSkill } from "./communication/email-sender.js";
+import { EmailReaderSkill } from "./communication/email-reader.js";
+import { SmsSenderSkill } from "./communication/sms-sender.js";
+import { NotificationSkill } from "./communication/notification.js";
 import { logger } from "../utils/logger.js";
 
 export function initializeSkills(): void {
@@ -88,6 +92,12 @@ export function initializeSkills(): void {
   SkillsRegistry.register(new TextAnalyzerSkill());
   SkillsRegistry.register(new ImageAnalyzerSkill());
   SkillsRegistry.register(new CalculatorSkill());
+
+  // Communication skills
+  SkillsRegistry.register(new EmailSenderSkill());
+  SkillsRegistry.register(new EmailReaderSkill());
+  SkillsRegistry.register(new SmsSenderSkill());
+  SkillsRegistry.register(new NotificationSkill());
 
   logger.info(`Initialized ${SkillsRegistry.count()} skills`);
 }
