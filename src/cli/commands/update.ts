@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { execSync } from "child_process";
 import chalk from "chalk";
 import ora from "ora";
+import inquirer from "inquirer";
 import path from "path";
 import fs from "fs";
 
@@ -97,8 +98,22 @@ export const updateCommand = new Command("update")
 
     spinnerGit.succeed("[1/4] Git OK");
 
-    // Step 1b: Force reset if requested
+    // Step 1b: Force reset if requested (with confirmation)
     if (options.force && hasLocalChanges) {
+      const { confirmForce } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirmForce",
+          message: chalk.yellow("⚠️  Supprimer toutes les modifications locales ?"),
+          default: false,
+        },
+      ]);
+
+      if (!confirmForce) {
+        console.log(chalk.yellow("Annulé."));
+        process.exit(0);
+      }
+
       const spinnerReset = ora("    Réinitialisation des modifications locales...").start();
       const resetResult = runCommand("git checkout -- . && git clean -fd", projectRoot);
       if (!resetResult.success) {
@@ -108,9 +123,13 @@ export const updateCommand = new Command("update")
       spinnerReset.succeed("    Modifications locales supprimées");
     }
 
+    // Detect current branch
+    const branchResult = runCommand("git rev-parse --abbrev-ref HEAD", projectRoot);
+    const currentBranch = branchResult.success ? branchResult.output : "main";
+
     // Step 2: Git pull
-    const spinnerPull = ora("[2/4] git pull origin main...").start();
-    const pullResult = runCommand("git pull origin main", projectRoot);
+    const spinnerPull = ora(`[2/4] git pull origin ${currentBranch}...`).start();
+    const pullResult = runCommand(`git pull origin ${currentBranch}`, projectRoot);
 
     if (!pullResult.success) {
       spinnerPull.fail("Échec du git pull");

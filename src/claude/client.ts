@@ -38,8 +38,8 @@ class ClaudeClientClass {
     this.authMethod = credentials.anthropic.authMethod;
 
     if (this.authMethod === "oauth") {
-      // Try to get fresh token from Claude Code
-      this.oauthToken = credentials.anthropic.oauthToken || getAccessToken();
+      // Always prefer fresh token from Claude Code over stored one
+      this.oauthToken = getAccessToken() || credentials.anthropic.oauthToken;
       if (this.oauthToken) {
         logger.info(`Claude client using OAuth (${credentials.anthropic.oauthEmail || "unknown"})`);
       } else {
@@ -50,9 +50,14 @@ class ClaudeClientClass {
 
     if (this.authMethod === "apikey") {
       this.apiKey = options?.apiKey || credentials.anthropic.apiKey;
-      if (!this.apiKey) {
-        logger.warn("No API key configured");
-      }
+    }
+
+    // Verify we have some form of authentication
+    if (!this.oauthToken && !this.apiKey) {
+      throw new Error(
+        "Aucune méthode d'authentification disponible. " +
+        "Configure une API Key ou connecte-toi via 'claude login', puis relance 'novaclaw setup'."
+      );
     }
 
     this.initialized = true;
@@ -69,7 +74,9 @@ class ClaudeClientClass {
     if (this.apiKey) {
       return { "x-api-key": this.apiKey };
     }
-    return {};
+    throw new Error(
+      "Aucune authentification configurée. Exécute 'novaclaw setup' pour configurer."
+    );
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {

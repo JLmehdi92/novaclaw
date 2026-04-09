@@ -197,10 +197,12 @@ async function setupAuth(): Promise<{
       console.log(chalk.green(`✓ Token Claude Code valide`));
       console.log(chalk.gray(`  Compte: ${claudeCodeStatus.email}`));
       console.log(chalk.gray(`  Expire: ${claudeCodeStatus.expiresAt}`));
+      // Don't store the token - it will be read fresh from Claude Code at runtime
+      // This ensures we always use the latest token if Claude Code refreshes it
       return {
         authMethod: "oauth",
         apiKey: null,
-        oauthToken: token,
+        oauthToken: null,  // Token read at runtime from Claude Code
         oauthEmail: claudeCodeStatus.email || null,
       };
     } else {

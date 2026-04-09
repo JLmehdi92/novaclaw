@@ -84,7 +84,15 @@ export function readClaudeCredentials(): ClaudeCodeCredentials | null {
 
   try {
     const content = fs.readFileSync(credPath, "utf-8");
-    const data: ClaudeCredentialsFile = JSON.parse(content);
+
+    let data: ClaudeCredentialsFile;
+    try {
+      data = JSON.parse(content);
+    } catch (parseError) {
+      logger.error(`Fichier credentials Claude Code corrompu ou JSON invalide: ${credPath}`);
+      logger.debug(`Erreur de parsing: ${parseError}`);
+      return null;
+    }
 
     // Try claudeAiOauth format first (newer)
     if (data.claudeAiOauth?.accessToken) {
