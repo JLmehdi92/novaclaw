@@ -101,25 +101,20 @@ class ClaudeClientClass {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
       // Use system prompt or fallback to default
-      const systemInstructions = request.system?.trim() ||
+      const systemPrompt = request.system?.trim() ||
         "Tu es NovaClaw, un assistant IA personnel. Réponds en français de manière utile et amicale.";
 
-      // Build full prompt with clear structure
-      const fullPrompt = `${systemInstructions}
+      logger.debug(`Calling Claude with prompt: ${prompt.slice(0, 30)}...`);
 
-L'utilisateur dit: "${prompt}"`;
-
-      logger.debug(`System prompt: ${systemInstructions.slice(0, 50)}...`);
-
-      // Use spawnSync with shell: true for PATH resolution on Windows
-      // Note: Don't use --bare as it disables OAuth authentication!
+      // Use --system-prompt to REPLACE Claude Code's default system prompt
       const result = spawnSync("claude", [
-        "-p", fullPrompt,
+        "-p", prompt,
+        "--system-prompt", systemPrompt,
         "--model", request.model,
         "--output-format", "text"
       ], {
         encoding: "utf-8",
-        timeout: 180000, // 3 minutes (no --bare = slower startup)
+        timeout: 180000,
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
         shell: true,
