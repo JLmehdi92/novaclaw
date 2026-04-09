@@ -104,14 +104,14 @@ class ClaudeClientClass {
       const fullPrompt = `${request.system}\n\nUser: ${prompt}`;
 
       // Use spawnSync with shell: true for PATH resolution on Windows
+      // Note: Don't use --bare as it disables OAuth authentication!
       const result = spawnSync("claude", [
         "-p", fullPrompt,
         "--model", request.model,
-        "--output-format", "text",
-        "--bare"
+        "--output-format", "text"
       ], {
         encoding: "utf-8",
-        timeout: 120000,
+        timeout: 180000, // 3 minutes (no --bare = slower startup)
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
         shell: true,
