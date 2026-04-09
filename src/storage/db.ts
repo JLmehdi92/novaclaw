@@ -29,6 +29,7 @@ export async function initDatabase(dbPath?: string): Promise<void> {
   try {
     db = new Database(finalPath);
     db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = OFF");
 
     // Run migrations
     await runMigrations();
