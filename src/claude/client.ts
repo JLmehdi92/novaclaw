@@ -1,9 +1,10 @@
 // src/claude/client.ts
-import { loadConfig } from "../config/loader.js";
+import { loadConfig, loadCredentials } from "../config/loader.js";
 import { getModelId, DEFAULT_MODEL } from "./models.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
 import { SkillError } from "../utils/errors.js";
+import { getAccessToken } from "../auth/claude-code.js";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -25,12 +26,50 @@ interface ChatResponse {
 class ClaudeClientClass {
   private initialized = false;
   private model: string = DEFAULT_MODEL;
+  private authMethod: "oauth" | "apikey" = "apikey";
+  private apiKey: string | null = null;
+  private oauthToken: string | null = null;
 
   async initialize(options?: { model?: string; apiKey?: string }): Promise<void> {
     const config = loadConfig();
+    const credentials = loadCredentials();
+
     this.model = options?.model || config.provider.model || DEFAULT_MODEL;
+    this.authMethod = credentials.anthropic.authMethod;
+
+    if (this.authMethod === "oauth") {
+      // Try to get fresh token from Claude Code
+      this.oauthToken = credentials.anthropic.oauthToken || getAccessToken();
+      if (this.oauthToken) {
+        logger.info(`Claude client using OAuth (${credentials.anthropic.oauthEmail || "unknown"})`);
+      } else {
+        logger.warn("OAuth token not available, falling back to API key");
+        this.authMethod = "apikey";
+      }
+    }
+
+    if (this.authMethod === "apikey") {
+      this.apiKey = options?.apiKey || credentials.anthropic.apiKey;
+      if (!this.apiKey) {
+        logger.warn("No API key configured");
+      }
+    }
+
     this.initialized = true;
-    logger.info(`Claude client initialized with model: ${this.model}`);
+    logger.info(`Claude client initialized with model: ${this.model} (auth: ${this.authMethod})`);
+  }
+
+  /**
+   * Get the authorization header for API calls
+   */
+  private getAuthHeader(): Record<string, string> {
+    if (this.authMethod === "oauth" && this.oauthToken) {
+      return { Authorization: `Bearer ${this.oauthToken}` };
+    }
+    if (this.apiKey) {
+      return { "x-api-key": this.apiKey };
+    }
+    return {};
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {

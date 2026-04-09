@@ -9,6 +9,7 @@ import { saveConfig, saveCredentials, ensureConfigDir, configExists } from "../.
 import { detectLegacyEnv, performMigration } from "../../config/migrate.js";
 import { PERSONALITY_PROMPTS, SKILL_PRESETS, SECURITY_PRESETS, ALL_SKILLS, SKILL_CATEGORIES } from "../../config/defaults.js";
 import { CLAUDE_MODELS } from "../../claude/models.js";
+import { checkClaudeCodeStatus, getClaudeCodeSetupInstructions, getAccessToken } from "../../auth/claude-code.js";
 
 // ---------------------------------------------------------------------------
 // Telegram token validation
@@ -151,41 +152,98 @@ async function setupAdditionalUsers(ownerId: number): Promise<number[]> {
 async function setupAuth(): Promise<{
   authMethod: "oauth" | "apikey";
   apiKey: string | null;
+  oauthToken: string | null;
+  oauthEmail: string | null;
 }> {
   console.log("\n" + chalk.cyan.bold("━━ Authentification Claude ━━━━━━━━━━━━━━━━━━━━━━━━━"));
+
+  // Check for Claude Code credentials
+  const claudeCodeStatus = checkClaudeCodeStatus();
+
+  // Build choices based on what's available
+  const choices: Array<{ name: string; value: string }> = [];
+
+  if (claudeCodeStatus.available) {
+    choices.push({
+      name: chalk.green("✓") + ` Claude Code OAuth (${claudeCodeStatus.email}) - Utilise ton abonnement`,
+      value: "oauth",
+    });
+  } else {
+    choices.push({
+      name: chalk.gray("○") + ` Claude Code OAuth - ${claudeCodeStatus.error}`,
+      value: "oauth_unavailable",
+    });
+  }
+
+  choices.push({
+    name: "API Key - Paiement à l'usage (console.anthropic.com)",
+    value: "apikey",
+  });
 
   const { authMethod } = await inquirer.prompt([
     {
       type: "list",
       name: "authMethod",
-      message: "Méthode d'authentification Anthropic :",
-      choices: [
-        { name: "API Key (recommandé)", value: "apikey" },
-        { name: "OAuth (non disponible dans cette version)", value: "oauth" },
-      ],
-      default: "apikey",
+      message: "Méthode d'authentification :",
+      choices,
+      default: claudeCodeStatus.available ? "oauth" : "apikey",
     },
   ]);
 
-  if (authMethod === "oauth") {
-    // OAuth placeholder – falls back to API key
-    console.log(chalk.yellow("OAuth non disponible dans cette version. Utilise l'API Key."));
+  // Handle OAuth with Claude Code
+  if (authMethod === "oauth" && claudeCodeStatus.available) {
+    const token = getAccessToken();
+    if (token) {
+      console.log(chalk.green(`✓ Token Claude Code valide`));
+      console.log(chalk.gray(`  Compte: ${claudeCodeStatus.email}`));
+      console.log(chalk.gray(`  Expire: ${claudeCodeStatus.expiresAt}`));
+      return {
+        authMethod: "oauth",
+        apiKey: null,
+        oauthToken: token,
+        oauthEmail: claudeCodeStatus.email || null,
+      };
+    } else {
+      console.log(chalk.yellow("Token expiré, bascule sur API Key."));
+    }
   }
 
+  // Handle unavailable OAuth - show instructions
+  if (authMethod === "oauth_unavailable") {
+    console.log(chalk.yellow("\nClaude Code non disponible."));
+    console.log(chalk.gray(getClaudeCodeSetupInstructions()));
+
+    const { continueWithApiKey } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "continueWithApiKey",
+        message: "Continuer avec une API Key ?",
+        default: true,
+      },
+    ]);
+
+    if (!continueWithApiKey) {
+      console.log(chalk.yellow("Installe Claude Code puis relance 'novaclaw setup'."));
+      process.exit(0);
+    }
+  }
+
+  // API Key flow
   const { apiKey } = await inquirer.prompt([
     {
       type: "password",
       name: "apiKey",
       message: "Clé API Anthropic (sk-ant-…) :",
       mask: "*",
-      validate: (v) =>
-        v.trim().length > 10 || authMethod === "oauth" ? true : "Clé API requise",
+      validate: (v) => (v.trim().length > 10 ? true : "Clé API requise (commence par sk-ant-)"),
     },
   ]);
 
   return {
     authMethod: "apikey",
-    apiKey: apiKey.trim() || null,
+    apiKey: apiKey.trim(),
+    oauthToken: null,
+    oauthEmail: null,
   };
 }
 
@@ -537,7 +595,7 @@ async function quickSetup(): Promise<void> {
 
   const { botToken, ownerId } = await setupTelegram();
   const additionalUsers = await setupAdditionalUsers(ownerId);
-  const { authMethod, apiKey } = await setupAuth();
+  const { authMethod, apiKey, oauthToken, oauthEmail } = await setupAuth();
   const language = await setupLanguage();
 
   const config: NovaClawConfig = {
@@ -582,8 +640,8 @@ async function quickSetup(): Promise<void> {
     anthropic: {
       authMethod,
       apiKey,
-      oauthToken: null,
-      oauthEmail: null,
+      oauthToken,
+      oauthEmail,
     },
   };
 
@@ -612,7 +670,7 @@ async function completeSetup(): Promise<void> {
   const additionalUsers = await setupAdditionalUsers(ownerId);
 
   // 2. Auth
-  const { authMethod, apiKey } = await setupAuth();
+  const { authMethod, apiKey, oauthToken, oauthEmail } = await setupAuth();
 
   // 3. Language
   const language = await setupLanguage();
@@ -669,8 +727,8 @@ async function completeSetup(): Promise<void> {
     anthropic: {
       authMethod,
       apiKey,
-      oauthToken: null,
-      oauthEmail: null,
+      oauthToken,
+      oauthEmail,
     },
   };
 
