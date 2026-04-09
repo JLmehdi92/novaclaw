@@ -9,18 +9,18 @@ export interface ConversationContext {
 }
 
 /**
- * Convert Telegram user ID to internal database user ID
+ * Get or create user and return internal database user ID
  */
-function getInternalUserId(telegramUserId: number): number | null {
-  const user = usersRepo.findByTelegramId(telegramUserId);
-  return user?.id || null;
+function getOrCreateInternalUserId(telegramUserId: number): number {
+  const user = usersRepo.getOrCreate(telegramUserId);
+  return user.id;
 }
 
 export const memoryManager = {
   async buildContext(chatId: number, telegramUserId: number): Promise<ConversationContext> {
     const recentMessages = messagesRepo.getRecent(chatId, 30);
-    const internalUserId = getInternalUserId(telegramUserId);
-    const memories = internalUserId ? memoriesRepo.getByUser(internalUserId).slice(0, 10) : [];
+    const internalUserId = getOrCreateInternalUserId(telegramUserId);
+    const memories = memoriesRepo.getByUser(internalUserId).slice(0, 10);
 
     return {
       messages: recentMessages
@@ -42,11 +42,11 @@ export const memoryManager = {
     role: "user" | "assistant",
     content: string
   ): Promise<void> {
-    // Convert Telegram ID to internal database user ID
-    const internalUserId = getInternalUserId(telegramUserId);
+    // Get or create user and use internal database ID
+    const internalUserId = getOrCreateInternalUserId(telegramUserId);
     messagesRepo.create({
       chatId,
-      userId: internalUserId || undefined,
+      userId: internalUserId,
       role,
       content,
     });
@@ -58,8 +58,7 @@ export const memoryManager = {
     key: string,
     value: string
   ): Promise<void> {
-    const internalUserId = getInternalUserId(telegramUserId);
-    if (!internalUserId) return;
+    const internalUserId = getOrCreateInternalUserId(telegramUserId);
     memoriesRepo.upsert({
       userId: internalUserId,
       category,
