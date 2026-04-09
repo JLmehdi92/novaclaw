@@ -26,6 +26,11 @@ import { ArchiveSkill } from "./files/archive.js";
 import { FileConvertSkill } from "./files/file-convert.js";
 import { FileWatchSkill } from "./files/file-watch.js";
 import { CloudStorageSkill } from "./files/cloud-storage.js";
+import { HttpSkill } from "./network/http.js";
+import { WebhookSenderSkill } from "./network/webhook-sender.js";
+import { WebhookReceiverSkill } from "./network/webhook-receiver.js";
+import { DnsLookupSkill } from "./network/dns-lookup.js";
+import { PortScannerSkill } from "./network/port-scanner.js";
 import { logger } from "../utils/logger.js";
 
 export function initializeSkills(): void {
@@ -64,6 +69,13 @@ export function initializeSkills(): void {
   SkillsRegistry.register(new FileConvertSkill());
   SkillsRegistry.register(new FileWatchSkill());
   SkillsRegistry.register(new CloudStorageSkill());
+
+  // Network & HTTP skills
+  SkillsRegistry.register(new HttpSkill());
+  SkillsRegistry.register(new WebhookSenderSkill());
+  SkillsRegistry.register(new WebhookReceiverSkill());
+  SkillsRegistry.register(new DnsLookupSkill());
+  SkillsRegistry.register(new PortScannerSkill());
 
   logger.info(`Initialized ${SkillsRegistry.count()} skills`);
 }
