@@ -4,7 +4,7 @@ import { getModelId, DEFAULT_MODEL } from "./models.js";
 import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
 import { SkillError } from "../utils/errors.js";
-import { getAccessToken } from "../auth/claude-code.js";
+import { execSync } from "child_process";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -26,59 +26,23 @@ interface ChatResponse {
 class ClaudeClientClass {
   private initialized = false;
   private model: string = DEFAULT_MODEL;
-  private authMethod: "oauth" | "apikey" = "apikey";
-  private apiKey: string | null = null;
-  private oauthToken: string | null = null;
 
-  async initialize(options?: { model?: string; apiKey?: string }): Promise<void> {
+  async initialize(options?: { model?: string }): Promise<void> {
     const config = loadConfig();
-    const credentials = loadCredentials();
-
     this.model = options?.model || config.provider.model || DEFAULT_MODEL;
-    this.authMethod = credentials.anthropic.authMethod;
 
-    if (this.authMethod === "oauth") {
-      // Always prefer fresh token from Claude Code over stored one
-      this.oauthToken = getAccessToken() || credentials.anthropic.oauthToken;
-      if (this.oauthToken) {
-        logger.info(`Claude client using OAuth (${credentials.anthropic.oauthEmail || "unknown"})`);
-      } else {
-        logger.warn("OAuth token not available, falling back to API key");
-        this.authMethod = "apikey";
-      }
-    }
-
-    if (this.authMethod === "apikey") {
-      this.apiKey = options?.apiKey || credentials.anthropic.apiKey;
-    }
-
-    // Verify we have some form of authentication
-    if (!this.oauthToken && !this.apiKey) {
+    // Verify Claude CLI is available
+    try {
+      execSync("claude --version", { stdio: "pipe" });
+      logger.info("Claude CLI detected");
+    } catch {
       throw new Error(
-        "Aucune méthode d'authentification disponible. " +
-        "Configure une API Key ou connecte-toi via 'claude login', puis relance 'novaclaw setup'."
+        "Claude CLI non trouvé. Installe-le avec: npm install -g @anthropic-ai/claude-code"
       );
     }
 
     this.initialized = true;
-    logger.info(`Claude client initialized with model: ${this.model} (auth: ${this.authMethod})`);
-  }
-
-  /**
-   * Get the authorization header for API calls
-   * Note: OAuth tokens must be sent via x-api-key header, NOT Bearer!
-   */
-  private getAuthHeader(): Record<string, string> {
-    if (this.authMethod === "oauth" && this.oauthToken) {
-      // OAuth tokens go via x-api-key, not Authorization Bearer
-      return { "x-api-key": this.oauthToken };
-    }
-    if (this.apiKey) {
-      return { "x-api-key": this.apiKey };
-    }
-    throw new Error(
-      "Aucune authentification configurée. Exécute 'novaclaw setup' pour configurer."
-    );
+    logger.info(`Claude client initialized with model: ${this.model} (via CLI)`);
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {
@@ -130,56 +94,44 @@ class ClaudeClientClass {
     messages: Array<{ role: string; content: string }>;
     tools: Array<{ name: string; description: string; input_schema: unknown }>;
   }): Promise<{ text: string; toolCalls?: Array<{ name: string; input: Record<string, unknown> }> }> {
-    const authHeaders = this.getAuthHeader();
+    // Build the prompt from messages
+    const lastUserMessage = request.messages.filter((m) => m.role === "user").pop();
+    const prompt = lastUserMessage?.content || "";
 
-    const body: Record<string, unknown> = {
-      model: request.model,
-      max_tokens: 4096,
-      system: request.system,
-      messages: request.messages.filter(m => m.role !== "system"),
-    };
+    // Build conversation context
+    const context = request.messages
+      .slice(0, -1) // Exclude the last message (we'll send it as the prompt)
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
 
-    // Only include tools if there are any
-    if (request.tools.length > 0) {
-      body.tools = request.tools;
-    }
+    const fullPrompt = context ? `${context}\n\nUser: ${prompt}` : prompt;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-        ...authHeaders,
-      },
-      body: JSON.stringify(body),
-    });
+    try {
+      // Call Claude CLI with -p (print mode) and --output-format text
+      const escapedPrompt = fullPrompt.replace(/"/g, '\\"').replace(/\n/g, "\\n");
+      const escapedSystem = request.system.replace(/"/g, '\\"').replace(/\n/g, "\\n");
 
-    if (!response.ok) {
-      const error = await response.text();
-      logger.error(`Claude API error: ${response.status} - ${error}`);
-      throw new Error(`Claude API error: ${response.status}`);
-    }
+      const cmd = `claude -p "${escapedPrompt}" --model ${request.model} --system-prompt "${escapedSystem}" --output-format text --bare`;
 
-    const data = await response.json() as {
-      content: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }>;
-    };
+      logger.debug(`Calling Claude CLI: ${cmd.slice(0, 100)}...`);
 
-    // Extract text and tool calls from response
-    let text = "";
-    const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+      const output = execSync(cmd, {
+        encoding: "utf-8",
+        timeout: 120000, // 2 minutes timeout
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
 
-    for (const block of data.content) {
-      if (block.type === "text" && block.text) {
-        text += block.text;
-      } else if (block.type === "tool_use" && block.name && block.input) {
-        toolCalls.push({ name: block.name, input: block.input });
+      return {
+        text: output.trim() || "Je n'ai pas pu générer de réponse.",
+        toolCalls: undefined, // CLI mode doesn't support tool calls for now
+      };
+    } catch (error: any) {
+      logger.error(`Claude CLI error: ${error.message}`);
+      if (error.stderr) {
+        logger.error(`stderr: ${error.stderr}`);
       }
+      throw new Error(`Claude CLI error: ${error.message}`);
     }
-
-    return {
-      text: text || "Je n'ai pas pu générer de réponse.",
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
   }
 
   setModel(model: string): void {

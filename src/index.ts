@@ -24,10 +24,9 @@ async function main(): Promise<void> {
     await initDatabase();
     logger.info("Base de données initialisée");
 
-    // Initialize Claude client with credentials
-    const apiKey = credentials.anthropic.apiKey || undefined;
-    await ClaudeClient.initialize({ model: config.provider.model, apiKey });
-    logger.info("Client Claude initialisé");
+    // Initialize Claude client (uses Claude CLI)
+    await ClaudeClient.initialize({ model: config.provider.model });
+    logger.info("Client Claude initialisé (via CLI)");
 
     initializeSkills();
     logger.info(`Skills initialisés`);
