@@ -1,7 +1,7 @@
 // src/gateway/bot.ts
 import { Bot } from "grammy";
 import { loadConfig } from "../config.js";
-import { authMiddleware, loggingMiddleware } from "./middleware.js";
+import { authMiddleware, loggingMiddleware, rateLimitMiddleware } from "./middleware.js";
 import { registerCommands } from "./commands/telegram-commands.js";
 import { novaClawAgent } from "../core/agent.js";
 import { logger } from "../utils/logger.js";
@@ -15,6 +15,7 @@ export async function startBot(): Promise<void> {
 
   // Middleware
   bot.use(loggingMiddleware);
+  bot.use(rateLimitMiddleware);
   bot.use(authMiddleware);
 
   // Commands

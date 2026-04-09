@@ -19,7 +19,11 @@ export const usersRepo = {
       .get(telegramId) as User | undefined;
 
     if (row) {
-      row.preferences = JSON.parse(row.preferences as unknown as string || "{}");
+      try {
+        row.preferences = JSON.parse(row.preferences as unknown as string || "{}");
+      } catch {
+        row.preferences = {};
+      }
     }
     return row;
   },
@@ -55,7 +59,13 @@ export const usersRepo = {
     const rows = db.prepare("SELECT * FROM users").all() as User[];
     return rows.map((row) => ({
       ...row,
-      preferences: JSON.parse(row.preferences as unknown as string || "{}"),
+      preferences: (() => {
+        try {
+          return JSON.parse(row.preferences as unknown as string || "{}");
+        } catch {
+          return {};
+        }
+      })(),
     }));
   },
 
