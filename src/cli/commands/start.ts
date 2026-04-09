@@ -3,7 +3,7 @@ import { Command } from "commander";
 import ora from "ora";
 import chalk from "chalk";
 import { showLogo, showSuccess, showError } from "../logo.js";
-import { loadConfig } from "../../config.js";
+import { loadConfig, configExists, getConfigDir } from "../../config/loader.js";
 import { initDatabase } from "../../storage/db.js";
 import { initializeSkills } from "../../skills/init.js";
 import { ClaudeClient } from "../../claude/client.js";
@@ -18,17 +18,24 @@ export const startCommand = new Command("start")
     showLogo();
 
     try {
+      // Check if config exists
+      if (!configExists()) {
+        showError(`Configuration non trouvée. Exécute 'novaclaw setup' d'abord.`);
+        console.log(chalk.gray(`  Chemin: ${getConfigDir()}`));
+        process.exit(1);
+      }
+
       let spinner = ora("Loading configuration...").start();
       const config = loadConfig();
-      spinner.succeed(`Configuration loaded (${config.language})`);
+      spinner.succeed(`Configuration loaded (${config.agent.language})`);
 
       spinner = ora("Initializing database...").start();
       await initDatabase();
       spinner.succeed("Database ready");
 
       spinner = ora("Initializing Claude...").start();
-      await ClaudeClient.initialize({ model: config.claude.model });
-      spinner.succeed(`Claude ready (${config.claude.model})`);
+      await ClaudeClient.initialize({ model: config.provider.model });
+      spinner.succeed(`Claude ready (${config.provider.model})`);
 
       spinner = ora("Loading skills...").start();
       initializeSkills();
