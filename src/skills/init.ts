@@ -1,7 +1,13 @@
 // src/skills/init.ts
 import { SkillsRegistry } from "./registry.js";
-import { RunCodeSkill } from "./core/run-code.js";
 import { HttpApiSkill } from "./core/http-api.js";
+import { CodeRunnerSkill } from "./code/code-runner.js";
+import { CodeAnalyzerSkill } from "./code/code-analyzer.js";
+import { GitSkill } from "./code/git.js";
+import { GitHubSkill } from "./code/github.js";
+import { DockerSkill } from "./code/docker.js";
+import { DatabaseSkill } from "./code/database.js";
+import { ApiTesterSkill } from "./code/api-tester.js";
 import { BrowserSkill } from "./web/browser.js";
 import { ScreenshotSkill } from "./web/screenshot.js";
 import { WebScraperSkill } from "./web/web-scraper.js";
@@ -24,8 +30,16 @@ import { logger } from "../utils/logger.js";
 
 export function initializeSkills(): void {
   // Core skills
-  SkillsRegistry.register(new RunCodeSkill());
   SkillsRegistry.register(new HttpApiSkill());
+
+  // Code & Dev skills
+  SkillsRegistry.register(new CodeRunnerSkill());
+  SkillsRegistry.register(new CodeAnalyzerSkill());
+  SkillsRegistry.register(new GitSkill());
+  SkillsRegistry.register(new GitHubSkill());
+  SkillsRegistry.register(new DockerSkill());
+  SkillsRegistry.register(new DatabaseSkill());
+  SkillsRegistry.register(new ApiTesterSkill());
 
   // Web & Browser skills
   SkillsRegistry.register(new BrowserSkill());
