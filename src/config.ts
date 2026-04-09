@@ -1,7 +1,6 @@
 // src/config.ts
 import { config as dotenvConfig } from "dotenv";
 import { z } from "zod";
-import path from "path";
 import { ConfigError } from "./utils/errors.js";
 
 dotenvConfig();
