@@ -7,6 +7,7 @@ import { SkillError } from "../../utils/errors.js";
 export class FileOpsSkill extends BaseSkill {
   name = "file_ops";
   description = "Read, write, list, and delete files in the workspace";
+  category = "files";
   parameters = {
     type: "object" as const,
     properties: {

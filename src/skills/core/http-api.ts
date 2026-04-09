@@ -35,6 +35,7 @@ const BLOCKED_HOSTNAMES = [
 export class HttpApiSkill extends BaseSkill {
   name = "http_api";
   description = "Faire des requêtes HTTP vers des APIs externes";
+  category = "network";
   parameters = {
     type: "object" as const,
     properties: {

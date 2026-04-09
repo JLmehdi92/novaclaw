@@ -31,6 +31,7 @@ const DANGEROUS_PATTERNS = [
 export class RunCodeSkill extends BaseSkill {
   name = "run_code";
   description = "Exécuter du code JavaScript ou Python (avec restrictions de sécurité)";
+  category = "code";
   parameters = {
     type: "object" as const,
     properties: {

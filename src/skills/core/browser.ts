@@ -12,6 +12,7 @@ const PAGE_TIMEOUT = 30000; // 30 seconds for page operations
 export class BrowserSkill extends BaseSkill {
   name = "browser";
   description = "Naviguer sur le web: rechercher, visiter des pages, lire du contenu, screenshots";
+  category = "web";
   parameters = {
     type: "object" as const,
     properties: {

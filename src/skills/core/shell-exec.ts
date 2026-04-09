@@ -26,6 +26,7 @@ const OWNER_ONLY_COMMANDS = [
 export class ShellExecSkill extends BaseSkill {
   name = "shell_exec";
   description = "Exécuter des commandes shell (commandes dangereuses réservées à l'owner)";
+  category = "system";
   parameters = {
     type: "object" as const,
     properties: {
