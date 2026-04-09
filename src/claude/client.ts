@@ -31,14 +31,14 @@ class ClaudeClientClass {
     const config = loadConfig();
     this.model = options?.model || config.provider.model || DEFAULT_MODEL;
 
-    // Verify Claude CLI is available
-    const versionCheck = spawnSync("claude", ["--version"], { encoding: "utf-8" });
+    // Verify Claude CLI is available (use shell: true for PATH resolution on Windows)
+    const versionCheck = spawnSync("claude", ["--version"], { encoding: "utf-8", shell: true });
     if (versionCheck.error || versionCheck.status !== 0) {
       throw new Error(
         "Claude CLI non trouvé. Installe-le avec: npm install -g @anthropic-ai/claude-code"
       );
     }
-    logger.info("Claude CLI detected");
+    logger.info(`Claude CLI detected: ${versionCheck.stdout.trim()}`);
 
     this.initialized = true;
     logger.info(`Claude client initialized with model: ${this.model} (via CLI)`);
@@ -100,7 +100,7 @@ class ClaudeClientClass {
     try {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
-      // Use spawnSync with stdin to avoid shell escaping issues
+      // Use spawnSync with shell: true for PATH resolution on Windows
       const result = spawnSync("claude", [
         "-p", prompt,
         "--model", request.model,
@@ -112,6 +112,7 @@ class ClaudeClientClass {
         timeout: 120000,
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
+        shell: true,
       });
 
       if (result.error) {
