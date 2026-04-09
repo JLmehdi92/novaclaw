@@ -7,6 +7,7 @@ import { statusCommand } from "./commands/status.js";
 import { configCommand } from "./commands/config.js";
 import { skillsCommand } from "./commands/skills-cmd.js";
 import { serviceCommand } from "./commands/service.js";
+import { updateCommand } from "./commands/update.js";
 
 const program = new Command();
 
@@ -19,6 +20,7 @@ program
 program.addCommand(setupCommand);
 program.addCommand(startCommand);
 program.addCommand(statusCommand);
+program.addCommand(updateCommand);
 
 // Management commands
 program.addCommand(configCommand);
