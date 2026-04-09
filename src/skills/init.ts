@@ -40,6 +40,9 @@ import { EmailSenderSkill } from "./communication/email-sender.js";
 import { EmailReaderSkill } from "./communication/email-reader.js";
 import { SmsSenderSkill } from "./communication/sms-sender.js";
 import { NotificationSkill } from "./communication/notification.js";
+import { HomeAssistantSkill } from "./automation/home-assistant.js";
+import { MacroRecorderSkill } from "./automation/macro-recorder.js";
+import { WorkflowSkill } from "./automation/workflow.js";
 import { logger } from "../utils/logger.js";
 
 export function initializeSkills(): void {
@@ -98,6 +101,11 @@ export function initializeSkills(): void {
   SkillsRegistry.register(new EmailReaderSkill());
   SkillsRegistry.register(new SmsSenderSkill());
   SkillsRegistry.register(new NotificationSkill());
+
+  // Automation & IoT skills
+  SkillsRegistry.register(new HomeAssistantSkill());
+  SkillsRegistry.register(new MacroRecorderSkill());
+  SkillsRegistry.register(new WorkflowSkill());
 
   logger.info(`Initialized ${SkillsRegistry.count()} skills`);
 }
