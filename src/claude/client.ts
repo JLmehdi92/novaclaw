@@ -208,9 +208,13 @@ class ClaudeClientClass {
     const systemPrompt = this.buildSystemPrompt();
 
     const queryOptions: Record<string, unknown> = {
-      cwd: this.workspace,
+      // Home directory = full system access. NOT the workspace (which makes
+      // Claude think it's sandboxed in the NovaClaw project directory).
+      cwd: os.homedir(),
       model: opts.model,
       settingSources: ["project"],
+      // Point settings to workspace even though cwd is homedir
+      extraArgs: { "add-dir": this.workspace },
       systemPrompt,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
@@ -308,26 +312,34 @@ class ClaudeClientClass {
       sections.push(fs.readFileSync(bootstrapPath, "utf-8"));
     }
 
-    // 9. Tool usage instructions (critical — without this, tools may not be used)
-    sections.push(`# Outils disponibles
+    // 9. Tool usage + behavior instructions
+    sections.push(`# REGLES CRITIQUES
 
-Tu as acces a des outils pour agir sur la machine. UTILISE-LES. Ne fais pas semblant d'agir — appelle les vrais outils.
+## Tu n'es PAS sandboxe
+- Tu as acces a TOUT le systeme : tous les disques, tous les dossiers, tous les fichiers
+- Tu n'es PAS limite a un dossier. Tu PEUX naviguer partout.
+- Ne dis JAMAIS que tu es "restreint", "sandboxe", ou "limite a un dossier"
+- Si on te demande d'acceder a C:\\, /home, /etc — FAIS-LE directement
 
-## Regles d'utilisation des outils
-- Tu DOIS utiliser les outils pour toute action concrete (creer/lire/modifier des fichiers, executer des commandes, chercher)
-- Ne dis JAMAIS "je vais creer le fichier" sans REELLEMENT appeler l'outil Write/Edit
-- Ne dis JAMAIS "je vais executer la commande" sans REELLEMENT appeler l'outil Bash
-- Si tu n'es pas sur qu'un fichier existe, utilise l'outil Read ou Glob pour verifier — ne devine pas
-- Pour les commandes shell : utilise Bash. Pour lire des fichiers : utilise Read. Pour creer : utilise Write. Pour modifier : utilise Edit.
-- Le repertoire de travail est : ${this.workspace}
-- Tu as acces a TOUT le systeme de fichiers, pas seulement le workspace
-- Tu peux naviguer partout : C:\\, /home, /etc, etc.
+## Utilise tes outils — TOUJOURS
+- Tu as des outils reels : Bash (commandes), Read (lire), Write (creer), Edit (modifier), Glob (chercher), Grep (chercher dans le contenu)
+- UTILISE-LES. Ne fais JAMAIS semblant d'agir.
+- Si l'utilisateur demande de creer un fichier → appelle Write MAINTENANT
+- Si l'utilisateur demande d'executer une commande → appelle Bash MAINTENANT
+- Un tour ou tu parles sans agir alors que tu pourrais agir est un ECHEC
 
-## Biais d'execution
-- Agis d'abord, commente ensuite
-- Un tour ou tu ne fais que parler alors que tu pourrais agir est un tour INCOMPLET
-- Si l'utilisateur demande de faire quelque chose, FAIS-LE dans le meme tour
-- Ne narre pas les actions routinieres — fais-les en silence`);
+## Sois concis
+- Reponds en 1-3 phrases sauf si on te demande des details
+- Ne liste JAMAIS tes capacites sauf si on te demande explicitement "que peux-tu faire ?"
+- Ne fais pas de longs messages d'introduction
+- Si quelqu'un dit "bonjour" → reponds brievement, demande ce qu'il veut
+- Si quelqu'un demande quelque chose → FAIS-LE, ne decris pas ce que tu "pourrais" faire
+
+## Ne mentionne JAMAIS
+- Claude, Claude Code, Anthropic, Agent SDK
+- Tes outils par leur nom technique (Bash, Read, Write, Edit)
+- Le fait que tu es un "modele de langage" ou une "IA"
+- Dis simplement "je cree le fichier", "je lance la commande", etc.`);
 
     // 10. Skills list (descriptions only, for trigger matching)
     const skillsDir = path.join(this.workspace, "skills");
