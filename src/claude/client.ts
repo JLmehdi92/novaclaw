@@ -5,6 +5,9 @@ import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
 import { SkillError } from "../utils/errors.js";
 import { spawnSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -97,22 +100,33 @@ class ClaudeClientClass {
     const lastUserMessage = request.messages.filter((m) => m.role === "user").pop();
     const prompt = lastUserMessage?.content || "";
 
+    // Use system prompt or fallback to default
+    const systemPrompt = request.system?.trim() ||
+      "Tu es NovaClaw, un assistant IA personnel. Réponds en français de manière utile et amicale.";
+
+    // Write system prompt to a temp file to avoid shell escaping issues on Windows.
+    // Without this, special characters (accents, quotes, &, |, etc.) in the system prompt
+    // get mangled by cmd.exe when passed as a CLI argument with shell: true.
+    const tmpFile = path.join(os.tmpdir(), `novaclaw-sysprompt-${Date.now()}.txt`);
+    fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
+
     try {
       logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
 
-      // Use system prompt or fallback to default
-      const systemPrompt = request.system?.trim() ||
-        "Tu es NovaClaw, un assistant IA personnel. Réponds en français de manière utile et amicale.";
-
-      logger.debug(`Calling Claude with prompt: ${prompt.slice(0, 30)}...`);
-
-      // Use --system-prompt to REPLACE Claude Code's default system prompt
+      // FIX: Pass user prompt via stdin (input option) instead of as a CLI argument.
+      // With shell: true, CLI arguments go through cmd.exe on Windows, which interprets
+      // special characters (', ", &, |, ^, %, !, etc.) and mangles or truncates the prompt.
+      // This caused Claude to receive empty/garbled prompts and respond with
+      // "It looks like your message got cut off."
+      // stdin (the input option) bypasses the shell entirely — data goes through a pipe.
       const result = spawnSync("claude", [
-        "-p", prompt,
-        "--system-prompt", systemPrompt,
+        "-p",
+        "--no-session-persistence",
+        "--system-prompt-file", tmpFile,
         "--model", request.model,
         "--output-format", "text"
       ], {
+        input: prompt,
         encoding: "utf-8",
         timeout: 180000,
         maxBuffer: 10 * 1024 * 1024,
@@ -136,6 +150,9 @@ class ClaudeClientClass {
     } catch (error: any) {
       logger.error(`Claude CLI error: ${error.message}`);
       throw new Error(`Claude CLI error: ${error.message}`);
+    } finally {
+      // Clean up temp file
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
     }
   }
 
