@@ -73,18 +73,25 @@ function ensureWorkspace(): string {
   // updated). MEMORY.md is only created if it doesn't exist (preserve user data).
   const bundledWorkspace = path.join(path.dirname(path.dirname(__dirname)), "workspace");
   if (fs.existsSync(bundledWorkspace)) {
-    // Copy CLAUDE.md and SOUL.md (always overwrite — may have updates)
-    for (const file of ["CLAUDE.md", "SOUL.md"]) {
+    // Always overwrite these (may have updates from new versions)
+    for (const file of ["CLAUDE.md", "SOUL.md", "IDENTITY.md"]) {
       const src = path.join(bundledWorkspace, file);
       if (fs.existsSync(src)) {
         fs.copyFileSync(src, path.join(workspace, file));
       }
     }
-    // Copy MEMORY.md only if it doesn't exist (preserve user memories)
-    const memSrc = path.join(bundledWorkspace, "MEMORY.md");
-    const memDst = path.join(workspace, "MEMORY.md");
-    if (fs.existsSync(memSrc) && !fs.existsSync(memDst)) {
-      fs.copyFileSync(memSrc, memDst);
+    // Only create if missing (preserve user-edited data)
+    for (const file of ["MEMORY.md", "USER.md", "TOOLS.md", "BOOTSTRAP.md"]) {
+      const src = path.join(bundledWorkspace, file);
+      const dst = path.join(workspace, file);
+      if (fs.existsSync(src) && !fs.existsSync(dst)) {
+        fs.copyFileSync(src, dst);
+      }
+    }
+    // Ensure memory/ directory exists for daily notes
+    const memoryDir = path.join(workspace, "memory");
+    if (!fs.existsSync(memoryDir)) {
+      fs.mkdirSync(memoryDir, { recursive: true });
     }
     // Copy all skills (always overwrite)
     const bundledSkills = path.join(bundledWorkspace, "skills");
