@@ -33,6 +33,22 @@ export interface ChatResponse {
 // Session IDs per chat for multi-turn conversations
 const chatSessions = new Map<number, string>();
 
+/** Recursively copy a directory, creating subdirs as needed. */
+function copyDirRecursive(src: string, dst: string): void {
+  if (!fs.existsSync(dst)) {
+    fs.mkdirSync(dst, { recursive: true });
+  }
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const dstPath = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, dstPath);
+    } else {
+      fs.copyFileSync(srcPath, dstPath);
+    }
+  }
+}
+
 /**
  * Create the NovaClaw agent workspace with CLAUDE.md (identity) and
  * .claude/settings.json (permissions). This is how OpenClaw, ZeroClaw, etc.
@@ -97,12 +113,11 @@ function ensureWorkspace(): string {
     if (!fs.existsSync(memoryDir)) {
       fs.mkdirSync(memoryDir, { recursive: true });
     }
-    // Copy all skills (always overwrite)
+    // Copy all skills recursively (always overwrite)
+    // Skills are directories (e.g., skills/github/SKILL.md), not flat files
     const bundledSkills = path.join(bundledWorkspace, "skills");
     if (fs.existsSync(bundledSkills)) {
-      for (const file of fs.readdirSync(bundledSkills)) {
-        fs.copyFileSync(path.join(bundledSkills, file), path.join(skillsDir, file));
-      }
+      copyDirRecursive(bundledSkills, skillsDir);
     }
   }
 
