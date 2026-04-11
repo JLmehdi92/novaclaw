@@ -107,7 +107,14 @@ class ClaudeClientClass {
     const queryOptions: Record<string, unknown> = {
       cwd: os.homedir(),
       model: opts.model,
-      systemPrompt: opts.systemPrompt,
+      // Use preset mode: keeps the full Claude Code system prompt (with tool instructions)
+      // and APPENDS our NovaClaw identity. A plain string would REPLACE everything,
+      // causing Claude to lose knowledge of its tools (Bash, Read, Write, Edit, etc.).
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: opts.systemPrompt,
+      },
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       maxTurns: 30,
