@@ -1,12 +1,8 @@
 // src/claude/client.ts
-import { loadConfig, loadCredentials } from "../config/loader.js";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { loadConfig } from "../config/loader.js";
 import { getModelId, DEFAULT_MODEL } from "./models.js";
-import { SkillsRegistry } from "../skills/registry.js";
 import { logger } from "../utils/logger.js";
-import { SkillError } from "../utils/errors.js";
-import { spawnSync } from "child_process";
-import fs from "fs";
-import path from "path";
 import os from "os";
 
 interface Message {
@@ -14,17 +10,21 @@ interface Message {
   content: string;
 }
 
-interface ChatOptions {
+export interface ChatOptions {
   messages: Message[];
   systemPrompt: string;
   model?: string;
+  chatId?: number;
   onToolCall?: (name: string, args: Record<string, unknown>) => Promise<string>;
 }
 
-interface ChatResponse {
+export interface ChatResponse {
   text: string;
   toolsUsed: string[];
 }
+
+// Session IDs per chat for multi-turn conversations
+const chatSessions = new Map<number, string>();
 
 class ClaudeClientClass {
   private initialized = false;
@@ -33,18 +33,8 @@ class ClaudeClientClass {
   async initialize(options?: { model?: string }): Promise<void> {
     const config = loadConfig();
     this.model = options?.model || config.provider.model || DEFAULT_MODEL;
-
-    // Verify Claude CLI is available (use shell: true for PATH resolution on Windows)
-    const versionCheck = spawnSync("claude", ["--version"], { encoding: "utf-8", shell: true });
-    if (versionCheck.error || versionCheck.status !== 0) {
-      throw new Error(
-        "Claude CLI non trouvé. Installe-le avec: npm install -g @anthropic-ai/claude-code"
-      );
-    }
-    logger.info(`Claude CLI detected: ${versionCheck.stdout.trim()}`);
-
     this.initialized = true;
-    logger.info(`Claude client initialized with model: ${this.model} (via CLI)`);
+    logger.info(`Claude client initialized with model: ${this.model} (via Agent SDK)`);
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {
@@ -52,108 +42,117 @@ class ClaudeClientClass {
       throw new Error("Claude client not initialized");
     }
 
-    const { messages, systemPrompt, onToolCall } = options;
+    const { messages, systemPrompt, chatId } = options;
     const model = getModelId(options.model || this.model);
-    const tools = SkillsRegistry.getToolDefinitions();
     const toolsUsed: string[] = [];
 
-    const conversationMessages = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    logger.debug(`Sending to Claude (${model}): ${messages.length} messages, ${tools.length} tools`);
-
-    // Placeholder response - will be replaced with actual SDK call
-    const response = await this.callClaude({
-      model,
-      system: systemPrompt,
-      messages: conversationMessages,
-      tools: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.parameters,
-      })),
-    });
-
-    if (response.toolCalls && onToolCall) {
-      for (const toolCall of response.toolCalls) {
-        toolsUsed.push(toolCall.name);
-        const result = await onToolCall(toolCall.name, toolCall.input);
-        logger.debug(`Tool ${toolCall.name} returned: ${result.slice(0, 100)}...`);
-      }
-    }
-
-    return {
-      text: response.text,
-      toolsUsed,
-    };
-  }
-
-  private async callClaude(request: {
-    model: string;
-    system: string;
-    messages: Array<{ role: string; content: string }>;
-    tools: Array<{ name: string; description: string; input_schema: unknown }>;
-  }): Promise<{ text: string; toolCalls?: Array<{ name: string; input: Record<string, unknown> }> }> {
-    // Get only the last user message (simple approach)
-    const lastUserMessage = request.messages.filter((m) => m.role === "user").pop();
+    const lastUserMessage = messages.filter((m) => m.role === "user").pop();
     const prompt = lastUserMessage?.content || "";
 
-    // Use system prompt or fallback to default
-    const systemPrompt = request.system?.trim() ||
-      "Tu es NovaClaw, un assistant IA personnel. Réponds en français de manière utile et amicale.";
+    // Resume existing session for multi-turn conversations
+    const existingSessionId = chatId ? chatSessions.get(chatId) : undefined;
 
-    // Write system prompt to a temp file to avoid shell escaping issues on Windows.
-    // Without this, special characters (accents, quotes, &, |, etc.) in the system prompt
-    // get mangled by cmd.exe when passed as a CLI argument with shell: true.
-    const tmpFile = path.join(os.tmpdir(), `novaclaw-sysprompt-${Date.now()}.txt`);
-    fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
+    logger.debug(`Sending to Claude SDK (${model}): "${prompt.slice(0, 50)}..." session=${existingSessionId || "new"}`);
 
     try {
-      logger.debug(`Calling Claude CLI with prompt: ${prompt.slice(0, 50)}...`);
-
-      // FIX: Pass user prompt via stdin (input option) instead of as a CLI argument.
-      // With shell: true, CLI arguments go through cmd.exe on Windows, which interprets
-      // special characters (', ", &, |, ^, %, !, etc.) and mangles or truncates the prompt.
-      // This caused Claude to receive empty/garbled prompts and respond with
-      // "It looks like your message got cut off."
-      // stdin (the input option) bypasses the shell entirely — data goes through a pipe.
-      const result = spawnSync("claude", [
-        "-p",
-        "--no-session-persistence",
-        "--system-prompt-file", tmpFile,
-        "--model", request.model,
-        "--output-format", "text"
-      ], {
-        input: prompt,
-        encoding: "utf-8",
-        timeout: 180000,
-        maxBuffer: 10 * 1024 * 1024,
-        windowsHide: true,
-        shell: true,
+      const resultText = await this.callClaude(prompt, {
+        model,
+        systemPrompt,
+        sessionId: existingSessionId,
+        chatId,
+        toolsUsed,
       });
 
-      if (result.error) {
-        throw result.error;
-      }
-
-      if (result.status !== 0) {
-        logger.error(`Claude CLI stderr: ${result.stderr}`);
-        throw new Error(`Claude CLI exited with code ${result.status}`);
-      }
-
       return {
-        text: result.stdout.trim() || "Je n'ai pas pu générer de réponse.",
-        toolCalls: undefined,
+        text: resultText || "Je n'ai pas pu générer de réponse.",
+        toolsUsed,
       };
     } catch (error: any) {
-      logger.error(`Claude CLI error: ${error.message}`);
-      throw new Error(`Claude CLI error: ${error.message}`);
-    } finally {
-      // Clean up temp file
-      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+      // If resume failed, retry with a fresh session
+      if (existingSessionId && chatId) {
+        logger.warn(`Session resume failed, retrying fresh: ${error.message}`);
+        chatSessions.delete(chatId);
+        try {
+          const resultText = await this.callClaude(prompt, {
+            model,
+            systemPrompt,
+            sessionId: undefined,
+            chatId,
+            toolsUsed,
+          });
+          return {
+            text: resultText || "Je n'ai pas pu générer de réponse.",
+            toolsUsed,
+          };
+        } catch (retryError: any) {
+          logger.error(`Claude SDK retry error: ${retryError.message}`);
+          throw retryError;
+        }
+      }
+      logger.error(`Claude SDK error: ${error.message}`);
+      throw error;
     }
+  }
+
+  private async callClaude(
+    prompt: string,
+    opts: {
+      model: string;
+      systemPrompt: string;
+      sessionId?: string;
+      chatId?: number;
+      toolsUsed: string[];
+    }
+  ): Promise<string> {
+    const queryOptions: Record<string, unknown> = {
+      cwd: os.homedir(),
+      model: opts.model,
+      systemPrompt: opts.systemPrompt,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      maxTurns: 30,
+    };
+
+    if (opts.sessionId) {
+      queryOptions.resume = opts.sessionId;
+    }
+
+    let resultText = "";
+    let sessionId = "";
+
+    for await (const message of query({ prompt, options: queryOptions as any })) {
+      // Final result message — contains the complete response
+      if (message.type === "result") {
+        sessionId = message.session_id;
+        if (message.subtype === "success") {
+          resultText = message.result;
+        } else {
+          throw new Error(`Claude error: ${(message as any).error || "unknown"}`);
+        }
+      }
+
+      // Track tool usage from assistant messages
+      if (message.type === "assistant" && message.message?.content) {
+        sessionId = message.session_id;
+        for (const block of message.message.content as any[]) {
+          if (block.type === "tool_use") {
+            opts.toolsUsed.push(block.name);
+          }
+        }
+      }
+    }
+
+    // Store session for multi-turn conversations
+    if (opts.chatId && sessionId) {
+      chatSessions.set(opts.chatId, sessionId);
+    }
+
+    return resultText;
+  }
+
+  clearSession(chatId: number): void {
+    chatSessions.delete(chatId);
+    logger.info(`Session cleared for chat ${chatId}`);
   }
 
   setModel(model: string): void {

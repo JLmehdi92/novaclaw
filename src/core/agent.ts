@@ -32,9 +32,7 @@ export const novaClawAgent = {
           { role: "user", content: text },
         ],
         systemPrompt,
-        onToolCall: async (toolName, args) => {
-          return this.executeSkill(toolName, args, { userId, chatId, workspace });
-        },
+        chatId,
       });
 
       await memoryManager.appendMessage(chatId, userId, "assistant", response.text);
@@ -102,6 +100,7 @@ Réponds en ${lang}. L'utilisateur actuel a l'ID Telegram ${userId}.`;
 
   async resetSession(chatId: number): Promise<void> {
     sessionManager.reset(chatId);
+    ClaudeClient.clearSession(chatId);
     await memoryManager.clearChat(chatId);
     logger.info(`Session reset for chat ${chatId}`);
   },
