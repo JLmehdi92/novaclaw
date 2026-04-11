@@ -201,19 +201,17 @@ class ClaudeClientClass {
       toolsUsed: string[];
     }
   ): Promise<string> {
+    // Build system prompt from workspace files (like OpenClaw does)
+    // We do NOT use preset: "claude_code" because it forces the identity
+    // "You are Claude Code, Anthropic's official CLI" which we can't override.
+    // Tools (Bash, Read, Write, Edit, etc.) are available regardless of system prompt.
+    const systemPrompt = this.buildSystemPrompt();
+
     const queryOptions: Record<string, unknown> = {
-      // Workspace directory with CLAUDE.md (identity) and .claude/settings.json (permissions)
       cwd: this.workspace,
       model: opts.model,
-      // Load project settings from the workspace's .claude/settings.json
-      // This handles permissions WITHOUT touching the user's global ~/.claude/
       settingSources: ["project"],
-      // Preset keeps all Claude Code tools + CLAUDE.md is read automatically for identity
-      systemPrompt: {
-        type: "preset",
-        preset: "claude_code",
-      },
-      // Programmatic bypass as fallback (belt + suspenders)
+      systemPrompt,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       maxTurns: 30,
@@ -251,6 +249,119 @@ class ClaudeClientClass {
     }
 
     return resultText;
+  }
+
+  /**
+   * Build the system prompt from workspace files, like OpenClaw does.
+   * Does NOT use the Claude Code preset — builds a custom prompt so the
+   * agent has its own identity (NovaClaw, not Claude Code).
+   */
+  private buildSystemPrompt(): string {
+    const sections: string[] = [];
+
+    // 1. Load SOUL.md (personality)
+    const soulPath = path.join(this.workspace, "SOUL.md");
+    if (fs.existsSync(soulPath)) {
+      sections.push(fs.readFileSync(soulPath, "utf-8"));
+    }
+
+    // 2. Load IDENTITY.md
+    const identityPath = path.join(this.workspace, "IDENTITY.md");
+    if (fs.existsSync(identityPath)) {
+      sections.push(fs.readFileSync(identityPath, "utf-8"));
+    }
+
+    // 3. Load CLAUDE.md (instructions)
+    const claudePath = path.join(this.workspace, "CLAUDE.md");
+    if (fs.existsSync(claudePath)) {
+      sections.push(fs.readFileSync(claudePath, "utf-8"));
+    }
+
+    // 4. Load USER.md (owner info)
+    const userPath = path.join(this.workspace, "USER.md");
+    if (fs.existsSync(userPath)) {
+      sections.push(fs.readFileSync(userPath, "utf-8"));
+    }
+
+    // 5. Load TOOLS.md (local tools)
+    const toolsPath = path.join(this.workspace, "TOOLS.md");
+    if (fs.existsSync(toolsPath)) {
+      sections.push(fs.readFileSync(toolsPath, "utf-8"));
+    }
+
+    // 6. Load MEMORY.md (long-term memory)
+    const memoryPath = path.join(this.workspace, "MEMORY.md");
+    if (fs.existsSync(memoryPath)) {
+      sections.push("# Memoire\n" + fs.readFileSync(memoryPath, "utf-8"));
+    }
+
+    // 7. Load today's daily notes
+    const today = new Date().toISOString().split("T")[0];
+    const dailyPath = path.join(this.workspace, "memory", `${today}.md`);
+    if (fs.existsSync(dailyPath)) {
+      sections.push("# Notes du jour\n" + fs.readFileSync(dailyPath, "utf-8"));
+    }
+
+    // 8. Load BOOTSTRAP.md (first run only)
+    const bootstrapPath = path.join(this.workspace, "BOOTSTRAP.md");
+    if (fs.existsSync(bootstrapPath)) {
+      sections.push(fs.readFileSync(bootstrapPath, "utf-8"));
+    }
+
+    // 9. Tool usage instructions (critical — without this, tools may not be used)
+    sections.push(`# Outils disponibles
+
+Tu as acces a des outils pour agir sur la machine. UTILISE-LES. Ne fais pas semblant d'agir — appelle les vrais outils.
+
+## Regles d'utilisation des outils
+- Tu DOIS utiliser les outils pour toute action concrete (creer/lire/modifier des fichiers, executer des commandes, chercher)
+- Ne dis JAMAIS "je vais creer le fichier" sans REELLEMENT appeler l'outil Write/Edit
+- Ne dis JAMAIS "je vais executer la commande" sans REELLEMENT appeler l'outil Bash
+- Si tu n'es pas sur qu'un fichier existe, utilise l'outil Read ou Glob pour verifier — ne devine pas
+- Pour les commandes shell : utilise Bash. Pour lire des fichiers : utilise Read. Pour creer : utilise Write. Pour modifier : utilise Edit.
+- Le repertoire de travail est : ${this.workspace}
+- Tu as acces a TOUT le systeme de fichiers, pas seulement le workspace
+- Tu peux naviguer partout : C:\\, /home, /etc, etc.
+
+## Biais d'execution
+- Agis d'abord, commente ensuite
+- Un tour ou tu ne fais que parler alors que tu pourrais agir est un tour INCOMPLET
+- Si l'utilisateur demande de faire quelque chose, FAIS-LE dans le meme tour
+- Ne narre pas les actions routinieres — fais-les en silence`);
+
+    // 10. Skills list (descriptions only, for trigger matching)
+    const skillsDir = path.join(this.workspace, "skills");
+    if (fs.existsSync(skillsDir)) {
+      const skillDescriptions: string[] = [];
+      for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          const skillMd = path.join(skillsDir, entry.name, "SKILL.md");
+          if (fs.existsSync(skillMd)) {
+            const content = fs.readFileSync(skillMd, "utf-8");
+            // Extract just the description from YAML frontmatter
+            const descMatch = content.match(/description:\s*["\']?(.+?)["\']?\s*$/m);
+            if (descMatch) {
+              skillDescriptions.push(`- ${entry.name}: ${descMatch[1]}`);
+            }
+          }
+        }
+      }
+      if (skillDescriptions.length > 0) {
+        sections.push(`# Skills disponibles
+Avant de repondre, scanne cette liste. Si un skill correspond, lis son SKILL.md dans skills/<nom>/SKILL.md puis suis-le.
+
+${skillDescriptions.join("\n")}`);
+      }
+    }
+
+    // 11. Current date/time
+    sections.push(`# Contexte
+Date: ${new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+Heure: ${new Date().toLocaleTimeString("fr-FR")}
+OS: ${process.platform === "win32" ? "Windows" : process.platform}
+Workspace: ${this.workspace}`);
+
+    return sections.join("\n\n---\n\n");
   }
 
   clearSession(chatId: number): void {
