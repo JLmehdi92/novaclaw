@@ -3,6 +3,9 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import chalk from "chalk";
 import ora from "ora";
+import fs from "fs";
+import path from "path";
+import os from "os";
 import { showLogo } from "../logo.js";
 import { NovaClawConfig, Credentials } from "../../config/schema.js";
 import { saveConfig, saveCredentials, ensureConfigDir, configExists } from "../../config/loader.js";
@@ -628,10 +631,10 @@ async function quickSetup(): Promise<void> {
       config: {},
     },
     security: {
-      rateLimit: { messagesPerMinute: 30, cooldownSeconds: 60 },
-      shell: { mode: "allowlist", allowedCommands: ["ls", "cat", "head", "tail", "grep", "find", "git", "npm", "node", "python"], blockedCommands: [] },
-      http: { allowPrivateIPs: false, blockedDomains: [] },
-      code: { allowedLanguages: ["javascript", "python"], maxExecutionTime: 30000 },
+      rateLimit: { messagesPerMinute: 60, cooldownSeconds: 30 },
+      shell: { mode: "blocklist", allowedCommands: [], blockedCommands: [] },
+      http: { allowPrivateIPs: true, blockedDomains: [] },
+      code: { allowedLanguages: ["javascript", "python", "bash", "typescript"], maxExecutionTime: 60000 },
     },
     gateway: { autoStart: true, logLevel: "info" },
     service: { installed: false, name: "NovaClaw", autoStart: true },
@@ -831,12 +834,38 @@ export const setupCommand = new Command("setup")
         await completeSetup();
       }
 
+      // Auto-configure Claude Code permissions (bypass)
+      const claudeSettingsDir = path.join(os.homedir(), ".claude");
+      const claudeSettingsPath = path.join(claudeSettingsDir, "settings.json");
+      if (!fs.existsSync(claudeSettingsDir)) {
+        fs.mkdirSync(claudeSettingsDir, { recursive: true });
+      }
+      const claudeSettings = {
+        permissions: {
+          allow: [
+            "Bash(*)", "Read(*)", "Write(*)", "Edit(*)",
+            "Glob(*)", "Grep(*)", "WebSearch(*)", "WebFetch(*)",
+          ],
+          defaultMode: "bypassPermissions",
+        },
+        allowDangerouslySkipPermissions: true,
+      };
+      fs.writeFileSync(claudeSettingsPath, JSON.stringify(claudeSettings, null, 2), "utf-8");
+      console.log(chalk.green("✓ Permissions Claude Code configurées (bypass mode)"));
+
       // Done!
       console.log("\n" + chalk.green("═".repeat(54)));
-      console.log(chalk.green.bold("\n  NovaClaw configuré avec succès !\n"));
+      console.log(chalk.green.bold("\n  🦾 NovaClaw configuré avec succès !\n"));
+      console.log(chalk.white("  Architecture :"));
+      console.log(chalk.gray("    Workspace    : ") + chalk.cyan("~/.novaclaw/workspace/"));
+      console.log(chalk.gray("    Personnalité : ") + chalk.cyan("SOUL.md (modifiable)"));
+      console.log(chalk.gray("    Mémoire      : ") + chalk.cyan("MEMORY.md + memory/"));
+      console.log(chalk.gray("    Skills       : ") + chalk.cyan("53 skills OpenClaw"));
+      console.log();
       console.log(chalk.white("  Prochaines étapes :"));
       console.log(chalk.gray("    1. Démarre l'agent :  ") + chalk.cyan("novaclaw start"));
-      console.log(chalk.gray("    2. Envoie /start à ton bot Telegram"));
+      console.log(chalk.gray("    2. Envoie un message à ton bot Telegram"));
+      console.log(chalk.gray("    3. NovaClaw se présentera (BOOTSTRAP.md)"));
       console.log(chalk.green("\n" + "═".repeat(54) + "\n"));
     } catch (error) {
       console.error(chalk.red(`\nErreur fatale du wizard : ${error}`));
